@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-serif {
+  font-family: "Noto Serif SC", serif;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ant-btn-primary {
+  background: #0f2747 !important;
+}
+.ant-btn-primary:hover {
+  background: #1e40af !important;
+}
+
+.ant-modal-header {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ant-drawer-header {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.clue-row:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 107, 53, 0.04) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+@keyframes pulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.critical-pulse {
+  animation: pulseRing 1.8s infinite;
+}
+
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgba(15, 39, 71, 0.03) 1px,
+    transparent 1px
+  );
+  background-size: 3px 3px;
+  pointer-events: none;
+  opacity: 0.5;
+}
