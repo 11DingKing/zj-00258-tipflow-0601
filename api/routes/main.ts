@@ -12,17 +12,6 @@ declare global {
   }
 }
 
-router.post("/login", async (req, res) => {
-  await service.ensureData();
-  const { username } = req.body;
-  const user = service.findUserByUsername(username);
-  if (user) {
-    res.json({ success: true, user });
-  } else {
-    res.status(401).json({ success: false, message: "用户不存在" });
-  }
-});
-
 router.use((req, res, next) => {
   const userId = req.header("X-User-Id");
   if (userId) {
@@ -77,37 +66,57 @@ function requireRole(roles: string[]) {
 }
 
 router.put("/clues/:id/grade", requireRole(["operator"]), async (req, res) => {
-  const { level } = req.body;
-  const clue = service.updateClueLevel(req.params.id, level, req.currentUser!);
-  if (!clue) return res.status(404).json({ message: "线索不存在" });
-  await service.db.write();
-  res.json(clue);
+  try {
+    const { level } = req.body;
+    const clue = service.updateClueLevel(
+      req.params.id,
+      level,
+      req.currentUser!,
+    );
+    if (!clue) return res.status(404).json({ message: "线索不存在" });
+    await service.db.write();
+    res.json(clue);
+  } catch (e: any) {
+    res.status(400).json({ message: e.message });
+  }
 });
 
 router.put("/clues/:id/claim", requireRole(["operator"]), async (req, res) => {
-  const clue = service.claimClue(req.params.id, req.currentUser!);
-  if (!clue) return res.status(404).json({ message: "线索不存在" });
-  await service.db.write();
-  res.json(clue);
+  try {
+    const clue = service.claimClue(req.params.id, req.currentUser!);
+    if (!clue) return res.status(404).json({ message: "线索不存在" });
+    await service.db.write();
+    res.json(clue);
+  } catch (e: any) {
+    res.status(400).json({ message: e.message });
+  }
 });
 
 router.put("/clues/:id/assign", requireRole(["operator"]), async (req, res) => {
-  const { teamId } = req.body;
-  const clue = service.assignClue(req.params.id, teamId, req.currentUser!);
-  if (!clue) return res.status(404).json({ message: "线索不存在" });
-  await service.db.write();
-  res.json(clue);
+  try {
+    const { teamId } = req.body;
+    const clue = service.assignClue(req.params.id, teamId, req.currentUser!);
+    if (!clue) return res.status(404).json({ message: "线索不存在" });
+    await service.db.write();
+    res.json(clue);
+  } catch (e: any) {
+    res.status(400).json({ message: e.message });
+  }
 });
 
 router.put(
   "/clues/:id/reject",
   requireRole(["operator", "verifier"]),
   async (req, res) => {
-    const { reason } = req.body;
-    const clue = service.returnClue(req.params.id, reason, req.currentUser!);
-    if (!clue) return res.status(404).json({ message: "线索不存在" });
-    await service.db.write();
-    res.json(clue);
+    try {
+      const { reason } = req.body;
+      const clue = service.returnClue(req.params.id, reason, req.currentUser!);
+      if (!clue) return res.status(404).json({ message: "线索不存在" });
+      await service.db.write();
+      res.json(clue);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
   },
 );
 
@@ -115,25 +124,41 @@ router.put(
   "/clues/:id/resolve",
   requireRole(["verifier"]),
   async (req, res) => {
-    const { result, note } = req.body;
-    const clue = service.resolveClue(
-      req.params.id,
-      result,
-      note,
-      req.currentUser!,
-    );
-    if (!clue) return res.status(404).json({ message: "线索不存在" });
-    await service.db.write();
-    res.json(clue);
+    try {
+      const { result, note } = req.body;
+      const clue = service.resolveClue(
+        req.params.id,
+        result,
+        note,
+        req.currentUser!,
+      );
+      if (!clue) return res.status(404).json({ message: "线索不存在" });
+      await service.db.write();
+      res.json(clue);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
   },
 );
 
-router.put("/clues/:id/resubmit", async (req, res) => {
-  const clue = service.resubmitClue(req.params.id, req.body || {});
-  if (!clue) return res.status(404).json({ message: "线索不存在" });
-  await service.db.write();
-  res.json(clue);
-});
+router.put(
+  "/clues/:id/resubmit",
+  requireRole(["reporter", "grid_member"]),
+  async (req, res) => {
+    try {
+      const clue = service.resubmitClue(
+        req.params.id,
+        req.body || {},
+        req.currentUser!,
+      );
+      if (!clue) return res.status(404).json({ message: "线索不存在" });
+      await service.db.write();
+      res.json(clue);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  },
+);
 
 router.get("/statistics/backlog", async (_req, res) => {
   await service.ensureData();

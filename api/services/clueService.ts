@@ -16,6 +16,125 @@ import type {
 } from "../../shared/types.js";
 import { nanoid } from "nanoid";
 
+export class FlowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FlowError";
+  }
+}
+
+const TERMINAL_STATUSES: ClueStatus[] = ["resolved"];
+
+const STATE_TRANSITIONS: Record<
+  string,
+  { from: ClueStatus[]; to: ClueStatus; allowedRoles: string[] }
+> = {
+  grade: {
+    from: ["pending_grade"],
+    to: "pending_assign",
+    allowedRoles: ["operator"],
+  },
+  claim: {
+    from: ["pending_grade"],
+    to: "pending_assign",
+    allowedRoles: ["operator"],
+  },
+  assign: {
+    from: ["pending_assign"],
+    to: "verifying",
+    allowedRoles: ["operator"],
+  },
+  return: {
+    from: ["pending_assign", "verifying"],
+    to: "returned",
+    allowedRoles: ["operator", "verifier"],
+  },
+  resolve: {
+    from: ["verifying"],
+    to: "resolved",
+    allowedRoles: ["verifier"],
+  },
+  resubmit: {
+    from: ["returned"],
+    to: "pending_grade",
+    allowedRoles: ["reporter", "grid_member"],
+  },
+};
+
+function validateTransition(
+  clue: Clue,
+  action: keyof typeof STATE_TRANSITIONS,
+  operator: User,
+): void {
+  const rule = STATE_TRANSITIONS[action];
+  if (!rule) throw new FlowError(`未知操作: ${action}`);
+
+  if (TERMINAL_STATUSES.includes(clue.status)) {
+    throw new FlowError("该线索已办结，无法进行此操作");
+  }
+
+  if (!rule.from.includes(clue.status)) {
+    const statusLabels: Record<ClueStatus, string> = {
+      pending_grade: "待分级",
+      pending_assign: "待派发",
+      verifying: "核查中",
+      resolved: "已办结",
+      returned: "退回补充",
+    };
+    const allowedFrom = rule.from.map((s) => statusLabels[s]).join("、");
+    throw new FlowError(
+      `当前状态「${statusLabels[clue.status]}」不允许此操作，仅支持从「${allowedFrom}」状态进行`,
+    );
+  }
+
+  if (!rule.allowedRoles.includes(operator.role)) {
+    throw new FlowError("您没有权限执行此操作");
+  }
+
+  if (action === "resolve" && operator.teamId !== clue.verifierTeamId) {
+    throw new FlowError("仅线索所属核查组可办结");
+  }
+
+  if (action === "resubmit" && operator.id !== clue.reporterId) {
+    throw new FlowError("仅举报人可重新提交");
+  }
+
+  if (action === "assign" && !clue.gradedAt) {
+    throw new FlowError("请先完成分级后再派发");
+  }
+}
+
+function clearFlowFields(clue: Clue, targetStatus: ClueStatus): void {
+  if (targetStatus === "pending_grade") {
+    delete clue.gradedAt;
+    delete clue.gradedBy;
+    delete clue.claimedBy;
+    delete clue.claimedByName;
+    delete clue.assignedTo;
+    delete clue.assignedToName;
+    delete clue.assignedAt;
+    delete clue.verifierTeamId;
+    delete clue.verifyResult;
+    delete clue.verifyNote;
+    delete clue.verifiedAt;
+    delete clue.returnReason;
+    delete clue.returnedAt;
+    delete clue.returnedBy;
+  } else if (targetStatus === "returned") {
+    delete clue.verifyResult;
+    delete clue.verifyNote;
+    delete clue.verifiedAt;
+  } else if (targetStatus === "pending_assign") {
+    delete clue.assignedTo;
+    delete clue.assignedToName;
+    delete clue.assignedAt;
+    delete clue.verifierTeamId;
+    delete clue.verifyResult;
+    delete clue.verifyNote;
+    delete clue.verifiedAt;
+  }
+}
+
 export async function ensureData() {
   await initDb();
   if (!db.data.users.length) {
@@ -222,10 +341,11 @@ export function updateClueLevel(
 ): Clue | null {
   const clue = getClueById(id);
   if (!clue) return null;
+  validateTransition(clue, "grade", operator);
   clue.level = level;
   clue.gradedAt = new Date().toISOString();
   clue.gradedBy = operator.id;
-  if (clue.status === "pending_grade") clue.status = "pending_assign";
+  clue.status = "pending_assign";
   addLog({
     clueId: id,
     operatorId: operator.id,
@@ -239,8 +359,14 @@ export function updateClueLevel(
 export function claimClue(id: string, operator: User): Clue | null {
   const clue = getClueById(id);
   if (!clue) return null;
+  validateTransition(clue, "claim", operator);
   clue.claimedBy = operator.id;
   clue.claimedByName = operator.name;
+  if (clue.status === "pending_grade" && !clue.gradedAt) {
+    clue.gradedAt = new Date().toISOString();
+    clue.gradedBy = operator.id;
+  }
+  clue.status = "pending_assign";
   addLog({
     clueId: id,
     operatorId: operator.id,
@@ -258,6 +384,7 @@ export function assignClue(
 ): Clue | null {
   const clue = getClueById(id);
   if (!clue) return null;
+  validateTransition(clue, "assign", operator);
   const team = db.data.teams.find((t) => t.id === teamId);
   clue.assignedTo = teamId;
   clue.assignedToName = team?.name;
@@ -267,10 +394,6 @@ export function assignClue(
   if (!clue.claimedBy) {
     clue.claimedBy = operator.id;
     clue.claimedByName = operator.name;
-  }
-  if (!clue.gradedAt) {
-    clue.gradedAt = new Date().toISOString();
-    clue.gradedBy = operator.id;
   }
   addLog({
     clueId: id,
@@ -289,6 +412,8 @@ export function returnClue(
 ): Clue | null {
   const clue = getClueById(id);
   if (!clue) return null;
+  validateTransition(clue, "return", operator);
+  clearFlowFields(clue, "returned");
   clue.status = "returned";
   clue.returnReason = reason;
   clue.returnedAt = new Date().toISOString();
@@ -311,6 +436,7 @@ export function resolveClue(
 ): Clue | null {
   const clue = getClueById(id);
   if (!clue) return null;
+  validateTransition(clue, "resolve", operator);
   clue.status = "resolved";
   clue.verifyResult = result;
   clue.verifyNote = note;
@@ -333,19 +459,22 @@ export function resolveClue(
 export function resubmitClue(
   id: string,
   extra: Partial<CreateClueInput>,
+  operator: User,
 ): Clue | null {
   const clue = getClueById(id);
   if (!clue) return null;
+  validateTransition(clue, "resubmit", operator);
   if (extra.description) clue.description = extra.description;
   if (extra.appName) clue.appName = extra.appName;
   if (extra.contact) clue.contact = extra.contact;
   clue.level = autoGrade(clue);
+  clearFlowFields(clue, "pending_grade");
   clue.status = "pending_grade";
   clue.resubmittedAt = new Date().toISOString();
   addLog({
     clueId: id,
-    operatorId: clue.reporterId,
-    operatorName: clue.reporterName,
+    operatorId: operator.id,
+    operatorName: operator.name,
     action: "补充材料重新提交",
     detail: "已补充材料，进入待分级",
   });

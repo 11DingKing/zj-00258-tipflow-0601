@@ -166,6 +166,33 @@ export function ClueDetailDrawer({
     }
   }
 
+  async function handleResubmit() {
+    if (!clue) return;
+    try {
+      const description = form.getFieldValue("resubmitDescription") as string;
+      const appName = form.getFieldValue("resubmitAppName") as string;
+      const contact = form.getFieldValue("resubmitContact") as string;
+      if (description && description.trim().length < 10) {
+        message.warning("补充说明至少需要10字");
+        return;
+      }
+      await api.resubmitClue(clue.id, {
+        description: description?.trim(),
+        appName,
+        contact,
+      });
+      message.success("已补充材料并重新提交，进入待分级");
+      onChanged?.();
+      load();
+    } catch (e: any) {
+      message.error(e.message);
+    }
+  }
+
+  const isReporter =
+    user && (user.role === "reporter" || user.role === "grid_member");
+  const isMine = isReporter && clue && clue.reporterId === user?.id;
+
   return (
     <Drawer
       title={
@@ -280,215 +307,262 @@ export function ClueDetailDrawer({
           )}
 
           {/* Operations */}
-          {(isOperator || (isVerifier && inMyTeam)) &&
-            clue.status !== "resolved" && (
-              <div className="space-y-4">
-                <Divider style={{ margin: "8px 0" }}>流转操作</Divider>
+          {clue.status !== "resolved" && (
+            <div className="space-y-4">
+              <Divider style={{ margin: "8px 0" }}>流转操作</Divider>
 
-                {isOperator && clue.status === "pending_grade" && (
-                  <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
-                    <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                      <ArrowLeftRight size={14} /> 确认分级
-                    </div>
-                    <Form form={form} layout="inline">
-                      <Form.Item
-                        name="newLevel"
-                        initialValue={clue.level}
-                        rules={[{ required: true }]}
-                        className="!mb-0 !mr-3"
-                      >
-                        <Select
-                          style={{ width: 160 }}
-                          options={Object.entries(LEVEL_LABELS).map(
-                            ([v, l]) => ({ value: v, label: l }),
-                          )}
-                        />
-                      </Form.Item>
-                      <Space>
-                        <Button
-                          type="primary"
-                          icon={<CheckSquare size={14} />}
-                          onClick={handleGrade}
-                        >
-                          确认等级
-                        </Button>
-                        <Button
-                          icon={<Users size={14} />}
-                          onClick={handleClaim}
-                        >
-                          我来认领
-                        </Button>
-                      </Space>
-                    </Form>
+              {isOperator && clue.status === "pending_grade" && (
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
+                  <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                    <ArrowLeftRight size={14} /> 确认分级并认领
                   </div>
-                )}
-
-                {isOperator &&
-                  (clue.status === "pending_assign" ||
-                    clue.status === "pending_grade") && (
-                    <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
-                      <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                        <Send size={14} /> 派发至核查组
-                      </div>
-                      <Form form={form} layout="vertical">
-                        <Form.Item
-                          name="teamId"
-                          label={
-                            <span className="text-xs text-slate-600">
-                              选择核查组
-                            </span>
-                          }
-                          rules={[{ required: true, message: "请选择核查组" }]}
-                          className="!mb-2"
-                        >
-                          <Select
-                            showSearch
-                            placeholder="按业务线选择合适的核查组"
-                            options={teams.map((t) => ({
-                              value: t.id,
-                              label: `${t.name}（${t.memberCount}人）`,
-                            }))}
-                            filterOption={(i, o) =>
-                              ((o?.label as string) || "").includes(i as string)
-                            }
-                          />
-                        </Form.Item>
-                        <Space>
-                          <Button
-                            type="primary"
-                            icon={<Send size={14} />}
-                            onClick={handleAssign}
-                          >
-                            确认派发
-                          </Button>
-                          <Button
-                            danger
-                            icon={<RotateCcw size={14} />}
-                            onClick={() =>
-                              form.setFieldsValue({ showReject: true })
-                            }
-                          >
-                            退回补充
-                          </Button>
-                        </Space>
-                      </Form>
-                    </div>
-                  )}
-
-                {isOperator && clue.status === "verifying" && (
-                  <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
-                    <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                      <RotateCcw size={14} /> 退回补充材料
-                    </div>
-                    <Form form={form} layout="vertical">
-                      <Form.Item
-                        name="rejectReason"
-                        label={
-                          <span className="text-xs text-slate-600">
-                            缺料说明
-                          </span>
-                        }
-                        rules={[
-                          {
-                            required: true,
-                            min: 5,
-                            message: "请说明需要补充的材料（≥5字）",
-                          },
-                        ]}
-                        className="!mb-2"
+                  <Form form={form} layout="inline">
+                    <Form.Item
+                      name="newLevel"
+                      initialValue={clue.level}
+                      rules={[{ required: true }]}
+                      className="!mb-0 !mr-3"
+                    >
+                      <Select
+                        style={{ width: 160 }}
+                        options={Object.entries(LEVEL_LABELS).map(([v, l]) => ({
+                          value: v,
+                          label: l,
+                        }))}
+                      />
+                    </Form.Item>
+                    <Space>
+                      <Button
+                        type="primary"
+                        icon={<CheckSquare size={14} />}
+                        onClick={handleGrade}
                       >
-                        <TextArea
-                          rows={3}
-                          placeholder="例如：缺少发生跳转时的截图或录屏证据，被举报应用名称不完整..."
-                        />
-                      </Form.Item>
+                        确认等级
+                      </Button>
+                      <Button icon={<Users size={14} />} onClick={handleClaim}>
+                        我来认领
+                      </Button>
+                    </Space>
+                  </Form>
+                  <div className="text-[11px] text-slate-400">
+                    待分级线索必须先确认等级后才能派发
+                  </div>
+                </div>
+              )}
+
+              {isOperator && clue.status === "pending_assign" && (
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
+                  <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                    <Send size={14} /> 派发至核查组
+                  </div>
+                  <Form form={form} layout="vertical">
+                    <Form.Item
+                      name="teamId"
+                      label={
+                        <span className="text-xs text-slate-600">
+                          选择核查组
+                        </span>
+                      }
+                      rules={[{ required: true, message: "请选择核查组" }]}
+                      className="!mb-2"
+                    >
+                      <Select
+                        showSearch
+                        placeholder="按业务线选择合适的核查组"
+                        options={teams.map((t) => ({
+                          value: t.id,
+                          label: `${t.name}（${t.memberCount}人）`,
+                        }))}
+                        filterOption={(i, o) =>
+                          ((o?.label as string) || "").includes(i as string)
+                        }
+                      />
+                    </Form.Item>
+                    <Space>
+                      <Button
+                        type="primary"
+                        icon={<Send size={14} />}
+                        onClick={handleAssign}
+                      >
+                        确认派发
+                      </Button>
                       <Button
                         danger
                         icon={<RotateCcw size={14} />}
-                        onClick={handleReject}
+                        onClick={() =>
+                          form.setFieldsValue({ showReject: true })
+                        }
                       >
-                        确认退回
+                        退回补充
                       </Button>
-                    </Form>
-                  </div>
-                )}
+                    </Space>
+                  </Form>
+                </div>
+              )}
 
-                {isVerifier && inMyTeam && clue.status === "verifying" && (
-                  <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
-                    <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                      <CheckSquare size={14} /> 回填核查结论
-                    </div>
-                    <Form form={form} layout="vertical">
-                      <Form.Item
-                        name="verifyResult"
-                        label={
-                          <span className="text-xs text-slate-600">
-                            核查结论
-                          </span>
-                        }
-                        rules={[{ required: true }]}
-                        className="!mb-2"
-                      >
-                        <Radio.Group>
-                          <Radio.Button value="confirmed">
-                            违规属实
-                          </Radio.Button>
-                          <Radio.Button value="unconfirmed">
-                            不属实
-                          </Radio.Button>
-                          <Radio.Button value="further_check">
-                            需进一步核实
-                          </Radio.Button>
-                        </Radio.Group>
-                      </Form.Item>
-                      <Form.Item
-                        name="verifyNote"
-                        label={
-                          <span className="text-xs text-slate-600">
-                            处理说明 / 处理建议
-                          </span>
-                        }
-                        rules={[
-                          {
-                            required: true,
-                            min: 5,
-                            message: "请填写详细说明（≥5字）",
-                          },
-                        ]}
-                        className="!mb-2"
-                      >
-                        <TextArea
-                          rows={3}
-                          placeholder="核查过程、处理建议、后续跟踪要点..."
-                        />
-                      </Form.Item>
-                      <Space>
-                        <Button
-                          type="primary"
-                          icon={<CheckSquare size={14} />}
-                          onClick={handleResolve}
-                        >
-                          提交并办结
-                        </Button>
-                        <Button
-                          danger
-                          icon={<RotateCcw size={14} />}
-                          onClick={() => {
-                            const form2 = form as any;
-                            form2.setFieldsValue([
-                              ["rejectReason", "请核查员补充证据材料"],
-                            ]);
-                            handleReject();
-                          }}
-                        >
-                          退回运营
-                        </Button>
-                      </Space>
-                    </Form>
+              {isOperator && clue.status === "verifying" && (
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
+                  <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                    <RotateCcw size={14} /> 退回补充材料
                   </div>
-                )}
-              </div>
-            )}
+                  <Form form={form} layout="vertical">
+                    <Form.Item
+                      name="rejectReason"
+                      label={
+                        <span className="text-xs text-slate-600">缺料说明</span>
+                      }
+                      rules={[
+                        {
+                          required: true,
+                          min: 5,
+                          message: "请说明需要补充的材料（≥5字）",
+                        },
+                      ]}
+                      className="!mb-2"
+                    >
+                      <TextArea
+                        rows={3}
+                        placeholder="例如：缺少发生跳转时的截图或录屏证据，被举报应用名称不完整..."
+                      />
+                    </Form.Item>
+                    <Button
+                      danger
+                      icon={<RotateCcw size={14} />}
+                      onClick={handleReject}
+                    >
+                      确认退回
+                    </Button>
+                  </Form>
+                </div>
+              )}
+
+              {isVerifier && inMyTeam && clue.status === "verifying" && (
+                <div className="p-4 rounded-xl border border-slate-200 space-y-3 animate-fade-in">
+                  <div className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                    <CheckSquare size={14} /> 回填核查结论
+                  </div>
+                  <Form form={form} layout="vertical">
+                    <Form.Item
+                      name="verifyResult"
+                      label={
+                        <span className="text-xs text-slate-600">核查结论</span>
+                      }
+                      rules={[{ required: true }]}
+                      className="!mb-2"
+                    >
+                      <Radio.Group>
+                        <Radio.Button value="confirmed">违规属实</Radio.Button>
+                        <Radio.Button value="unconfirmed">不属实</Radio.Button>
+                        <Radio.Button value="further_check">
+                          需进一步核实
+                        </Radio.Button>
+                      </Radio.Group>
+                    </Form.Item>
+                    <Form.Item
+                      name="verifyNote"
+                      label={
+                        <span className="text-xs text-slate-600">
+                          处理说明 / 处理建议
+                        </span>
+                      }
+                      rules={[
+                        {
+                          required: true,
+                          min: 5,
+                          message: "请填写详细说明（≥5字）",
+                        },
+                      ]}
+                      className="!mb-2"
+                    >
+                      <TextArea
+                        rows={3}
+                        placeholder="核查过程、处理建议、后续跟踪要点..."
+                      />
+                    </Form.Item>
+                    <Space>
+                      <Button
+                        type="primary"
+                        icon={<CheckSquare size={14} />}
+                        onClick={handleResolve}
+                      >
+                        提交并办结
+                      </Button>
+                      <Button
+                        danger
+                        icon={<RotateCcw size={14} />}
+                        onClick={() => {
+                          form.setFieldsValue({
+                            rejectReason: "请举报人补充证据材料",
+                          });
+                          handleReject();
+                        }}
+                      >
+                        退回运营
+                      </Button>
+                    </Space>
+                  </Form>
+                </div>
+              )}
+
+              {isReporter && isMine && clue.status === "returned" && (
+                <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/30 space-y-3 animate-fade-in">
+                  <div className="text-sm font-medium text-rose-700 flex items-center gap-1.5">
+                    <RotateCcw size={14} /> 补充材料后重新提交
+                  </div>
+                  <Form form={form} layout="vertical">
+                    <Form.Item
+                      name="resubmitDescription"
+                      label={
+                        <span className="text-xs text-slate-600">
+                          补充说明（选填，修改描述）
+                        </span>
+                      }
+                      className="!mb-2"
+                    >
+                      <TextArea rows={3} placeholder={clue.description} />
+                    </Form.Item>
+                    <Form.Item
+                      name="resubmitAppName"
+                      label={
+                        <span className="text-xs text-slate-600">
+                          被举报应用（选填，可修改）
+                        </span>
+                      }
+                      className="!mb-2"
+                    >
+                      <Select
+                        allowClear
+                        showSearch
+                        placeholder={clue.appName}
+                        options={APP_LIST.map((a) => ({
+                          value: a,
+                          label: a,
+                        }))}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      name="resubmitContact"
+                      label={
+                        <span className="text-xs text-slate-600">
+                          联系方式（选填，可修改）
+                        </span>
+                      }
+                      className="!mb-2"
+                    >
+                      <Input placeholder={clue.contact} />
+                    </Form.Item>
+                    <Button
+                      type="primary"
+                      icon={<CheckSquare size={14} />}
+                      onClick={handleResubmit}
+                    >
+                      补充材料并重新提交
+                    </Button>
+                  </Form>
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <div className="text-sm font-medium text-slate-800 mb-3 flex items-center gap-1.5">

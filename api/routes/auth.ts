@@ -1,33 +1,25 @@
-/**
- * This is a user authentication API route demo.
- * Handle user registration, login, token management, etc.
- */
-import { Router, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from "express";
+import * as service from "../services/clueService.js";
 
-const router = Router()
+const router = Router();
 
-/**
- * User Login
- * POST /api/auth/register
- */
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  // TODO: Implement register logic
-})
+router.post("/login", async (req: Request, res: Response): Promise<void> => {
+  await service.ensureData();
+  const { username } = req.body;
+  if (!username) {
+    res.status(400).json({ success: false, message: "缺少用户名" });
+    return;
+  }
+  const user = service.findUserByUsername(username);
+  if (user) {
+    res.json({ success: true, user });
+  } else {
+    res.status(401).json({ success: false, message: "用户不存在" });
+  }
+});
 
-/**
- * User Login
- * POST /api/auth/login
- */
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  // TODO: Implement login logic
-})
+router.post("/logout", async (_req: Request, res: Response): Promise<void> => {
+  res.json({ success: true });
+});
 
-/**
- * User Logout
- * POST /api/auth/logout
- */
-router.post('/logout', async (req: Request, res: Response): Promise<void> => {
-  // TODO: Implement logout logic
-})
-
-export default router
+export default router;
