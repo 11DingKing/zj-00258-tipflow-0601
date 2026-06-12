@@ -11,8 +11,19 @@
       "reporterType": "user",
       "reporterId": "u1",
       "level": "critical",
-      "status": "pending_grade",
-      "createdAt": "2026-06-12T01:24:09.356Z"
+      "status": "returned",
+      "createdAt": "2026-06-12T01:24:09.356Z",
+      "claimedBy": "u5",
+      "claimedByName": "李运营",
+      "gradedAt": "2026-06-12T22:44:50.984Z",
+      "gradedBy": "u5",
+      "assignedTo": "t1",
+      "assignedToName": "电商平台核查一组",
+      "verifierTeamId": "t1",
+      "assignedAt": "2026-06-12T22:45:28.104Z",
+      "returnReason": "缺少跳转录屏证据，请补充",
+      "returnedAt": "2026-06-12T22:49:42.240Z",
+      "returnedBy": "u5"
     },
     {
       "id": "c024",
@@ -2866,6 +2877,33 @@
       "detail": "已补充材料，进入待分级",
       "id": "op_zNfgwYuW",
       "timestamp": "2026-06-12T11:55:57.781Z"
+    },
+    {
+      "clueId": "cLNJeY6pX",
+      "operatorId": "u5",
+      "operatorName": "李运营",
+      "action": "认领线索",
+      "detail": "运营认领，准备派发核查",
+      "id": "op_o3binCDL",
+      "timestamp": "2026-06-12T22:44:50.984Z"
+    },
+    {
+      "clueId": "cLNJeY6pX",
+      "operatorId": "u5",
+      "operatorName": "李运营",
+      "action": "派发线索",
+      "detail": "派发至「电商平台核查一组」",
+      "id": "op_TvSwSRaP",
+      "timestamp": "2026-06-12T22:45:28.104Z"
+    },
+    {
+      "clueId": "cLNJeY6pX",
+      "operatorId": "u5",
+      "operatorName": "李运营",
+      "action": "退回补充",
+      "detail": "缺少跳转录屏证据，请补充",
+      "id": "op_m3hf2tlf",
+      "timestamp": "2026-06-12T22:49:42.240Z"
     }
   ]
 }
