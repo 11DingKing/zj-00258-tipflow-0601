@@ -197,6 +197,7 @@ export interface QueryParams {
   status?: ClueStatus;
   keyword?: string;
   appName?: string;
+  violationType?: string;
   teamId?: string;
   userId?: string;
   role?: string;
@@ -216,6 +217,8 @@ export function queryClues(params: QueryParams = {}): {
   if (params.level) list = list.filter((c) => c.level === params.level);
   if (params.status) list = list.filter((c) => c.status === params.status);
   if (params.appName) list = list.filter((c) => c.appName === params.appName);
+  if (params.violationType)
+    list = list.filter((c) => c.violationType === params.violationType);
   if (params.teamId)
     list = list.filter(
       (c) =>
@@ -501,20 +504,35 @@ export interface BacklogStat {
   avgWaitHours: number;
 }
 
-export function getBacklogStats(): BacklogStat[] {
+export function getBacklogStats(params?: {
+  startDate?: string;
+  endDate?: string;
+}): BacklogStat[] {
   const levels: ClueLevel[] = ["critical", "urgent", "normal"];
   const now = Date.now();
 
-  return levels.map((level) => {
-    const clues = db.data.clues.filter(
-      (c) => c.level === level && c.status !== "resolved",
-    );
-    const pendingGrade = clues.filter((c) => c.status === "pending_grade");
-    const pendingAssign = clues.filter((c) => c.status === "pending_assign");
-    const verifying = clues.filter((c) => c.status === "verifying");
-    const returned = clues.filter((c) => c.status === "returned");
+  let clues = [...db.data.clues].filter((c) => c.status !== "resolved");
 
-    const waitSum = clues.reduce((acc, c) => {
+  if (params?.startDate) {
+    const start = new Date(params.startDate);
+    clues = clues.filter((c) => new Date(c.createdAt) >= start);
+  }
+  if (params?.endDate) {
+    const end = new Date(params.endDate);
+    end.setHours(23, 59, 59);
+    clues = clues.filter((c) => new Date(c.createdAt) <= end);
+  }
+
+  return levels.map((level) => {
+    const levelClues = clues.filter((c) => c.level === level);
+    const pendingGrade = levelClues.filter((c) => c.status === "pending_grade");
+    const pendingAssign = levelClues.filter(
+      (c) => c.status === "pending_assign",
+    );
+    const verifying = levelClues.filter((c) => c.status === "verifying");
+    const returned = levelClues.filter((c) => c.status === "returned");
+
+    const waitSum = levelClues.reduce((acc, c) => {
       const ts = c.assignedAt || c.gradedAt || c.createdAt;
       return acc + Math.max(0, (now - new Date(ts).getTime()) / 3600000);
     }, 0);
@@ -525,9 +543,9 @@ export function getBacklogStats(): BacklogStat[] {
       pendingAssign: pendingAssign.length,
       verifying: verifying.length,
       returned: returned.length,
-      total: clues.length,
-      avgWaitHours: clues.length
-        ? Math.round((waitSum / clues.length) * 10) / 10
+      total: levelClues.length,
+      avgWaitHours: levelClues.length
+        ? Math.round((waitSum / levelClues.length) * 10) / 10
         : 0,
     };
   });
@@ -546,20 +564,68 @@ export interface TeamStat {
   transferRate: number;
 }
 
-export function getTeamStats(): TeamStat[] {
+export function getTeamStats(params?: {
+  startDate?: string;
+  endDate?: string;
+}): TeamStat[] {
   return db.data.teams
     .map((team) => {
-      const received = db.data.clues.filter(
+      const allTeamClues = db.data.clues.filter(
         (c) => c.assignedTo === team.id || c.verifierTeamId === team.id,
       );
-      const resolved = received.filter((c) => c.status === "resolved");
-      const inProgress = received.filter((c) => c.status === "verifying");
-      const transferOut = db.data.clueTransfers.filter(
+
+      let received = allTeamClues;
+      let resolved = allTeamClues.filter((c) => c.status === "resolved");
+      let inProgress = allTeamClues.filter((c) => c.status === "verifying");
+
+      if (params?.startDate) {
+        const start = new Date(params.startDate);
+        received = received.filter(
+          (c) => c.assignedAt && new Date(c.assignedAt) >= start,
+        );
+        resolved = resolved.filter(
+          (c) => c.verifiedAt && new Date(c.verifiedAt) >= start,
+        );
+        inProgress = inProgress.filter(
+          (c) => c.assignedAt && new Date(c.assignedAt) >= start,
+        );
+      }
+      if (params?.endDate) {
+        const end = new Date(params.endDate);
+        end.setHours(23, 59, 59);
+        received = received.filter(
+          (c) => c.assignedAt && new Date(c.assignedAt) <= end,
+        );
+        resolved = resolved.filter(
+          (c) => c.verifiedAt && new Date(c.verifiedAt) <= end,
+        );
+        inProgress = inProgress.filter(
+          (c) =>
+            c.assignedAt &&
+            new Date(c.assignedAt) <= end &&
+            (!c.verifiedAt || new Date(c.verifiedAt) > end),
+        );
+      }
+
+      let transferOut = db.data.clueTransfers.filter(
         (t) => t.fromTeamId === team.id,
       );
-      const transferIn = db.data.clueTransfers.filter(
+      let transferIn = db.data.clueTransfers.filter(
         (t) => t.toTeamId === team.id,
       );
+
+      if (params?.startDate) {
+        const start = new Date(params.startDate);
+        transferOut = transferOut.filter((t) => new Date(t.createdAt) >= start);
+        transferIn = transferIn.filter((t) => new Date(t.createdAt) >= start);
+      }
+      if (params?.endDate) {
+        const end = new Date(params.endDate);
+        end.setHours(23, 59, 59);
+        transferOut = transferOut.filter((t) => new Date(t.createdAt) <= end);
+        transferIn = transferIn.filter((t) => new Date(t.createdAt) <= end);
+      }
+
       let totalHours = 0;
       let slaMet = 0;
       const levelSLA = { critical: 24, urgent: 48, normal: 72 };
@@ -830,15 +896,32 @@ export function getMergeAndTransferForClue(clueId: string): {
   return { merges, transfers, relatedClues };
 }
 
-export function getOverallTransferStats(): {
+export function getOverallTransferStats(params?: {
+  startDate?: string;
+  endDate?: string;
+}): {
   totalClues: number;
   transferredClues: number;
   transferRate: number;
   totalTransfers: number;
 } {
-  const clues = db.data.clues;
+  let clues = db.data.clues;
+  let transfers = db.data.clueTransfers;
+
+  if (params?.startDate) {
+    const start = new Date(params.startDate);
+    clues = clues.filter((c) => new Date(c.createdAt) >= start);
+    transfers = transfers.filter((t) => new Date(t.createdAt) >= start);
+  }
+  if (params?.endDate) {
+    const end = new Date(params.endDate);
+    end.setHours(23, 59, 59);
+    clues = clues.filter((c) => new Date(c.createdAt) <= end);
+    transfers = transfers.filter((t) => new Date(t.createdAt) <= end);
+  }
+
   const transferred = clues.filter((c) => (c.transferCount || 0) > 0);
-  const totalTransfers = db.data.clueTransfers.length;
+  const totalTransfers = transfers.length;
   return {
     totalClues: clues.length,
     transferredClues: transferred.length,

@@ -84,6 +84,7 @@ export function ClueDetailDrawer({
   const [mergeRemark, setMergeRemark] = useState("");
 
   const [transferFormVisible, setTransferFormVisible] = useState(false);
+  const [rejectVisible, setRejectVisible] = useState(false);
 
   const isOperator = user?.role === "operator";
   const isVerifier = user?.role === "verifier";
@@ -156,16 +157,21 @@ export function ClueDetailDrawer({
   async function handleReject() {
     if (!clue) return;
     try {
-      const reason = form.getFieldValue("rejectReason");
+      const values = await form.validateFields(["rejectReason"]);
+      const reason = values.rejectReason;
       if (!reason || reason.trim().length < 5) {
         message.warning("请填写缺料说明（至少5字）");
         return;
       }
       await api.rejectClue(clue.id, reason.trim());
       message.success("已退回补充材料");
+      setRejectVisible(false);
       onChanged?.();
       load();
     } catch (e: any) {
+      if (e?.errorFields) {
+        return;
+      }
       message.error(e.message);
     }
   }
@@ -630,13 +636,44 @@ export function ClueDetailDrawer({
                         <Button
                           danger
                           icon={<RotateCcw size={14} />}
-                          onClick={() =>
-                            form.setFieldsValue({ showReject: true })
-                          }
+                          onClick={() => setRejectVisible(!rejectVisible)}
                         >
-                          退回补充
+                          {rejectVisible ? "收起退回" : "退回补充"}
                         </Button>
                       </Space>
+                      {rejectVisible && (
+                        <div className="mt-3 pt-3 border-t border-slate-100">
+                          <Form.Item
+                            name="rejectReason"
+                            label={
+                              <span className="text-xs text-slate-600">
+                                缺料说明
+                              </span>
+                            }
+                            rules={[
+                              {
+                                required: true,
+                                min: 5,
+                                message: "请说明需要补充的材料（≥5字）",
+                              },
+                            ]}
+                            className="!mb-2"
+                          >
+                            <TextArea
+                              rows={3}
+                              placeholder="例如：缺少发生跳转时的截图或录屏证据，被举报应用名称不完整..."
+                            />
+                          </Form.Item>
+                          <Button
+                            danger
+                            type="primary"
+                            icon={<RotateCcw size={14} />}
+                            onClick={handleReject}
+                          >
+                            确认退回
+                          </Button>
+                        </div>
+                      )}
                     </Form>
                   </div>
                 )}
@@ -825,16 +862,44 @@ export function ClueDetailDrawer({
                             <Button
                               danger
                               icon={<RotateCcw size={14} />}
-                              onClick={() => {
-                                form.setFieldsValue({
-                                  rejectReason: "请举报人补充证据材料",
-                                });
-                                handleReject();
-                              }}
+                              onClick={() => setRejectVisible(!rejectVisible)}
                             >
-                              退回运营
+                              {rejectVisible ? "收起退回" : "退回运营"}
                             </Button>
                           </Space>
+                          {rejectVisible && (
+                            <div className="mt-3 pt-3 border-t border-slate-100">
+                              <Form.Item
+                                name="rejectReason"
+                                label={
+                                  <span className="text-xs text-slate-600">
+                                    缺料说明
+                                  </span>
+                                }
+                                rules={[
+                                  {
+                                    required: true,
+                                    min: 5,
+                                    message: "请说明需要补充的材料（≥5字）",
+                                  },
+                                ]}
+                                className="!mb-2"
+                              >
+                                <TextArea
+                                  rows={3}
+                                  placeholder="例如：缺少发生跳转时的截图或录屏证据，被举报应用名称不完整..."
+                                />
+                              </Form.Item>
+                              <Button
+                                danger
+                                type="primary"
+                                icon={<RotateCcw size={14} />}
+                                onClick={handleReject}
+                              >
+                                确认退回运营
+                              </Button>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <>

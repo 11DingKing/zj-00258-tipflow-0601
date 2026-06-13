@@ -154,24 +154,51 @@ export const api = {
     return r<string[]>("/apps");
   },
 
-  getBacklog() {
-    return r<BacklogStats[]>("/statistics/backlog");
+  getBacklog(params?: { startDate?: string; endDate?: string }) {
+    const qs = params
+      ? new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params).filter(
+              ([, v]) => v !== undefined && v !== "" && v !== null,
+            ),
+          ) as any,
+        ).toString()
+      : "";
+    return r<BacklogStats[]>(`/statistics/backlog${qs ? "?" + qs : ""}`);
   },
 
-  getTeamStats() {
-    return r<TeamStats[]>("/statistics/teams");
+  getTeamStats(params?: { startDate?: string; endDate?: string }) {
+    const qs = params
+      ? new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params).filter(
+              ([, v]) => v !== undefined && v !== "" && v !== null,
+            ),
+          ) as any,
+        ).toString()
+      : "";
+    return r<TeamStats[]>(`/statistics/teams${qs ? "?" + qs : ""}`);
   },
 
   getMyStats() {
     return r<any>("/statistics/my");
   },
 
-  getTransferStats() {
+  getTransferStats(params?: { startDate?: string; endDate?: string }) {
+    const qs = params
+      ? new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params).filter(
+              ([, v]) => v !== undefined && v !== "" && v !== null,
+            ),
+          ) as any,
+        ).toString()
+      : "";
     return r<{
       totalClues: number;
       transferredClues: number;
       transferRate: number;
       totalTransfers: number;
-    }>("/statistics/transfer");
+    }>(`/statistics/transfer${qs ? "?" + qs : ""}`);
   },
 };

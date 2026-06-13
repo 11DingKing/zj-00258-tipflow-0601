@@ -65,6 +65,7 @@ export default function CluesPage() {
     status?: ClueStatus;
     keyword?: string;
     appName?: string;
+    violationType?: string;
     teamId?: string;
     dateRange?: [dayjs.Dayjs, dayjs.Dayjs];
   }>({});
@@ -112,6 +113,7 @@ export default function CluesPage() {
         status: filters.status,
         keyword: filters.keyword,
         appName: filters.appName,
+        violationType: filters.violationType,
         teamId: filters.teamId,
         startDate: filters.dateRange?.[0]?.toISOString(),
         endDate: filters.dateRange?.[1]?.toISOString(),
@@ -510,10 +512,11 @@ export default function CluesPage() {
             allowClear
             placeholder="违规类型"
             style={{ width: 140 }}
+            value={filters.violationType || undefined}
             onChange={(v) =>
               setFilters((f) => ({
                 ...f,
-                appName: v ? undefined : filters.appName,
+                violationType: v || undefined,
               }))
             }
             options={VIOLATION_TYPES.map((v) => ({ label: v, value: v }))}

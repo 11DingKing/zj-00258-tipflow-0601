@@ -101,23 +101,45 @@ export default function StatisticsPage() {
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
+        const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+        const endDate = dayjs().endOf("day");
+        const startDate =
+          range === "all"
+            ? undefined
+            : dayjs()
+                .subtract(days - 1, "day")
+                .startOf("day");
+
         const [t, b, cluesRes, ts] = await Promise.all([
-          api.getTeamStats(),
-          api.getBacklog(),
-          api.listClues({ pageSize: 999 }),
-          api.getTransferStats(),
+          api.getTeamStats({
+            startDate: startDate?.toISOString(),
+            endDate: endDate.toISOString(),
+          }),
+          api.getBacklog({
+            startDate: startDate?.toISOString(),
+            endDate: endDate.toISOString(),
+          }),
+          api.listClues({
+            pageSize: 999,
+            startDate: startDate?.toISOString(),
+            endDate: endDate.toISOString(),
+          }),
+          api.getTransferStats({
+            startDate: startDate?.toISOString(),
+            endDate: endDate.toISOString(),
+          }),
         ]);
         setTeams(t);
         setBacklog(b);
         setTransferStats(ts);
 
-        // 构建趋势数据（按最近 7 天）
-        const days = 7;
+        const trendDays = range === "7d" ? 7 : range === "30d" ? 30 : 30;
         const now = dayjs();
         const trendData: any[] = [];
         const clues = cluesRes.list;
-        for (let i = days - 1; i >= 0; i--) {
+        for (let i = trendDays - 1; i >= 0; i--) {
           const d = now.subtract(i, "day");
           const dk = d.format("MM-DD");
           const dayClues = clues.filter((c) =>
@@ -140,7 +162,7 @@ export default function StatisticsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [range]);
 
   const totalResolved = teams.reduce((a, b) => a + b.resolvedCount, 0);
   const totalReceived = teams.reduce((a, b) => a + b.totalReceived, 0);

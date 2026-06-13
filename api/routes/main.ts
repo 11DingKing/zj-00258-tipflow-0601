@@ -205,14 +205,22 @@ router.put(
   },
 );
 
-router.get("/statistics/backlog", async (_req, res) => {
+router.get("/statistics/backlog", async (req, res) => {
   await service.ensureData();
-  res.json(service.getBacklogStats());
+  const { startDate, endDate } = req.query as {
+    startDate?: string;
+    endDate?: string;
+  };
+  res.json(service.getBacklogStats({ startDate, endDate }));
 });
 
-router.get("/statistics/teams", async (_req, res) => {
+router.get("/statistics/teams", async (req, res) => {
   await service.ensureData();
-  res.json(service.getTeamStats());
+  const { startDate, endDate } = req.query as {
+    startDate?: string;
+    endDate?: string;
+  };
+  res.json(service.getTeamStats({ startDate, endDate }));
 });
 
 router.get("/statistics/my", async (req, res) => {
@@ -221,7 +229,11 @@ router.get("/statistics/my", async (req, res) => {
   res.json(service.getMyStats(req.currentUser));
 });
 
-router.get("/statistics/transfer", async (_req, res) => {
+router.get("/statistics/transfer", async (req, res) => {
   await service.ensureData();
-  res.json(service.getOverallTransferStats());
+  const { startDate, endDate } = req.query as {
+    startDate?: string;
+    endDate?: string;
+  };
+  res.json(service.getOverallTransferStats({ startDate, endDate }));
 });
