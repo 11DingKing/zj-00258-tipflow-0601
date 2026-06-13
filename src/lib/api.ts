@@ -9,6 +9,8 @@ import type {
   TeamStats,
   ReporterType,
   VerifyResult,
+  ClueMerge,
+  ClueTransfer,
 } from "../../shared/types";
 
 const BASE = "/api";
@@ -66,7 +68,13 @@ export const api = {
   },
 
   getClue(id: string) {
-    return r<{ clue: Clue; operations: OperationLog[] }>(`/clues/${id}`);
+    return r<{
+      clue: Clue;
+      operations: OperationLog[];
+      merges: ClueMerge[];
+      transfers: ClueTransfer[];
+      relatedClues: Clue[];
+    }>(`/clues/${id}`);
   },
 
   createClue(data: {
@@ -124,6 +132,20 @@ export const api = {
     });
   },
 
+  mergeClues(id: string, childClueIds: string[], remark?: string) {
+    return r<ClueMerge>(`/clues/${id}/merge`, {
+      method: "PUT",
+      body: JSON.stringify({ childClueIds, remark }),
+    });
+  },
+
+  transferClue(id: string, targetTeamId: string, reason: string) {
+    return r<ClueTransfer>(`/clues/${id}/transfer`, {
+      method: "PUT",
+      body: JSON.stringify({ targetTeamId, reason }),
+    });
+  },
+
   listTeams() {
     return r<Team[]>("/teams");
   },
@@ -142,5 +164,14 @@ export const api = {
 
   getMyStats() {
     return r<any>("/statistics/my");
+  },
+
+  getTransferStats() {
+    return r<{
+      totalClues: number;
+      transferredClues: number;
+      transferRate: number;
+      totalTransfers: number;
+    }>("/statistics/transfer");
   },
 };

@@ -10,6 +10,8 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
+  Link2,
+  Shuffle,
 } from "lucide-react";
 import {
   Table,
@@ -27,6 +29,7 @@ import {
   Radio,
   message,
   Drawer,
+  Modal,
 } from "antd";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
@@ -72,6 +75,11 @@ export default function CluesPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [apps, setApps] = useState<string[]>(APP_LIST);
   const [teams, setTeams] = useState<any[]>([]);
+
+  const [batchMergeOpen, setBatchMergeOpen] = useState(false);
+  const [batchMergeLoading, setBatchMergeLoading] = useState(false);
+  const [batchMergeRemark, setBatchMergeRemark] = useState("");
+  const [batchMasterId, setBatchMasterId] = useState<string>("");
 
   const openFromQuery = sp.get("id");
   useEffect(() => {
@@ -218,6 +226,65 @@ export default function CluesPage() {
         ),
     },
     {
+      title: "合并关系",
+      dataIndex: "mergedParentId",
+      width: 100,
+      render: (_: any, r: Clue) => {
+        if (r.isMergeMaster) {
+          return (
+            <Tooltip
+              title={`主线索，已合并 ${r.mergedChildIds?.length || 0} 条`}
+            >
+              <Tag
+                color="indigo"
+                className="!text-[11px] !px-1.5 !py-0 flex items-center gap-1 !margin-0"
+              >
+                <Link2 size={10} /> 主线索
+                {r.mergedChildIds?.length ? (
+                  <span className="font-semibold">
+                    ×{r.mergedChildIds.length}
+                  </span>
+                ) : null}
+              </Tag>
+            </Tooltip>
+          );
+        }
+        if (r.mergedParentId) {
+          return (
+            <Tooltip title={`已合并入 ${r.mergedParentId}`}>
+              <Tag
+                color="geekblue"
+                className="!text-[11px] !px-1.5 !py-0 flex items-center gap-1 !margin-0"
+              >
+                <Link2 size={10} /> 已合并
+              </Tag>
+            </Tooltip>
+          );
+        }
+        return <span className="text-xs text-slate-400">—</span>;
+      },
+    },
+    {
+      title: "转派",
+      dataIndex: "transferCount",
+      width: 80,
+      render: (v: number | undefined, r: Clue) => {
+        if (v && v > 0) {
+          return (
+            <Tooltip title={`已被转派 ${v} 次`}>
+              <Tag
+                color="orange"
+                className="!text-[11px] !px-1.5 !py-0 flex items-center gap-1 !margin-0"
+              >
+                <Shuffle size={10} /> {v}
+              </Tag>
+            </Tooltip>
+          );
+        }
+        return <span className="text-xs text-slate-400">—</span>;
+      },
+    },
+    {
       title: "提交时间",
       dataIndex: "createdAt",
       width: 130,
@@ -272,6 +339,54 @@ export default function CluesPage() {
     message.success(
       `已标记 ${selected.length} 条线索待派发（请进入详情逐个派发）`,
     );
+  }
+
+  function openBatchMerge() {
+    if (selected.length < 2) {
+      message.warning("请至少选择2条线索进行合并");
+      return;
+    }
+    const selectedClues = data.filter((d) => selected.includes(d.id));
+    const apps = new Set(selectedClues.map((c) => c.appName));
+    const types = new Set(selectedClues.map((c) => c.violationType));
+    if (apps.size > 1 || types.size > 1) {
+      message.warning("只能合并同一应用、同一违规类型的线索");
+      return;
+    }
+    const valid = selectedClues.filter(
+      (c) => c.status !== "resolved" && !c.mergedParentId,
+    );
+    if (valid.length < 2) {
+      message.warning("所选线索中不足2条可合并（排除已办结/已合并的）");
+      return;
+    }
+    setBatchMasterId(valid[0].id);
+    setBatchMergeRemark("");
+    setBatchMergeOpen(true);
+  }
+
+  async function handleBatchMerge() {
+    const childIds = selected.filter((id) => id !== batchMasterId);
+    if (childIds.length === 0) {
+      message.warning("请选择主线索之外的子线索");
+      return;
+    }
+    setBatchMergeLoading(true);
+    try {
+      await api.mergeClues(
+        batchMasterId,
+        childIds,
+        batchMergeRemark || undefined,
+      );
+      message.success(`已合并 ${childIds.length} 条线索入主线索`);
+      setBatchMergeOpen(false);
+      setSelected([]);
+      load();
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setBatchMergeLoading(false);
+    }
   }
 
   return (
@@ -474,6 +589,14 @@ export default function CluesPage() {
               >
                 批量派发
               </Button>
+              <Button
+                size="small"
+                icon={<Link2 size={13} />}
+                onClick={openBatchMerge}
+                type="default"
+              >
+                批量合并
+              </Button>
               <Button size="small" icon={<Download size={13} />}>
                 导出数据
               </Button>
@@ -601,7 +724,102 @@ export default function CluesPage() {
         clueId={drawerId}
         onClose={closeDrawer}
         onChanged={load}
+        setDrawerId={setDrawerId}
       />
+
+      <Modal
+        title={
+          <span className="font-serif text-base flex items-center gap-2">
+            <Link2 size={16} className="text-indigo-600" /> 批量合并线索
+          </span>
+        }
+        open={batchMergeOpen}
+        onCancel={() => setBatchMergeOpen(false)}
+        onOk={handleBatchMerge}
+        confirmLoading={batchMergeLoading}
+        okText="确认合并"
+        cancelText="取消"
+        width={600}
+      >
+        <div className="space-y-4">
+          <div className="text-xs text-slate-600">
+            请选择主线索（其它线索将合并入此主线索统一核查）：
+          </div>
+          <div className="max-h-[300px] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+            {data
+              .filter(
+                (d) =>
+                  selected.includes(d.id) &&
+                  d.status !== "resolved" &&
+                  !d.mergedParentId,
+              )
+              .map((c) => (
+                <div
+                  key={c.id}
+                  className={[
+                    "flex items-start gap-3 px-3 py-2.5 cursor-pointer transition",
+                    batchMasterId === c.id
+                      ? "bg-indigo-50"
+                      : "hover:bg-slate-50",
+                  ].join(" ")}
+                  onClick={() => setBatchMasterId(c.id)}
+                >
+                  <div className="mt-1">
+                    <div
+                      className={[
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                        batchMasterId === c.id
+                          ? "border-indigo-600"
+                          : "border-slate-300",
+                      ].join(" ")}
+                    >
+                      {batchMasterId === c.id && (
+                        <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-indigo-600">
+                        {c.id}
+                      </span>
+                      <LevelBadge level={c.level} />
+                      <StatusBadge status={c.status} />
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {dayjs(c.createdAt).format("MM-DD HH:mm")}
+                      </span>
+                      {batchMasterId === c.id && (
+                        <Tag
+                          color="indigo"
+                          className="!text-[10px] !px-1.5 !py-0 !margin-0"
+                        >
+                          主线索
+                        </Tag>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-1 line-clamp-1">
+                      {c.description}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      举报人：{c.reporterName}
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+          <div>
+            <div className="text-xs text-slate-600 mb-1.5">
+              合并备注（选填）
+            </div>
+            <Input.TextArea
+              rows={2}
+              value={batchMergeRemark}
+              onChange={(e) => setBatchMergeRemark(e.target.value)}
+              placeholder="例如：同一用户多次举报同一违规，合并后统一处理..."
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

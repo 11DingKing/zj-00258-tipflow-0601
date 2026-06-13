@@ -38,6 +38,10 @@ export interface Clue {
   returnedAt?: string;
   returnedBy?: string;
   resubmittedAt?: string;
+  mergedParentId?: string;
+  mergedChildIds?: string[];
+  isMergeMaster?: boolean;
+  transferCount?: number;
 }
 
 export interface Team {
@@ -72,6 +76,32 @@ export interface TeamStats {
   slaRate: number;
   totalReceived: number;
   inProgress: number;
+  transferOutCount: number;
+  transferInCount: number;
+  transferRate: number;
+}
+
+export interface ClueMerge {
+  id: string;
+  masterClueId: string;
+  childClueIds: string[];
+  mergedBy: string;
+  mergedByName: string;
+  mergedAt: string;
+  remark?: string;
+}
+
+export interface ClueTransfer {
+  id: string;
+  clueId: string;
+  fromTeamId: string;
+  fromTeamName: string;
+  toTeamId: string;
+  toTeamName: string;
+  reason: string;
+  operatorId: string;
+  operatorName: string;
+  createdAt: string;
 }
 
 export interface BacklogStats {

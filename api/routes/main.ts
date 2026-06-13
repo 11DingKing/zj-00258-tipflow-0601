@@ -46,7 +46,8 @@ router.get("/clues/:id", async (req, res) => {
   const clue = service.getClueById(req.params.id);
   if (!clue) return res.status(404).json({ message: "线索不存在" });
   const operations = service.getOperationsByClueId(req.params.id);
-  res.json({ clue, operations });
+  const extra = service.getMergeAndTransferForClue(req.params.id);
+  res.json({ clue, operations, ...extra });
 });
 
 router.post("/clues", async (req, res) => {
@@ -160,6 +161,50 @@ router.put(
   },
 );
 
+router.put("/clues/:id/merge", requireRole(["operator"]), async (req, res) => {
+  try {
+    const { childClueIds, remark } = req.body;
+    if (!Array.isArray(childClueIds) || childClueIds.length === 0) {
+      return res.status(400).json({ message: "请选择要合并的线索" });
+    }
+    const merge = service.mergeClues(
+      req.params.id,
+      childClueIds,
+      remark,
+      req.currentUser!,
+    );
+    if (!merge) return res.status(404).json({ message: "线索不存在" });
+    await service.db.write();
+    res.json(merge);
+  } catch (e: any) {
+    res.status(400).json({ message: e.message });
+  }
+});
+
+router.put(
+  "/clues/:id/transfer",
+  requireRole(["operator", "verifier"]),
+  async (req, res) => {
+    try {
+      const { targetTeamId, reason } = req.body;
+      if (!targetTeamId) {
+        return res.status(400).json({ message: "请选择目标核查组" });
+      }
+      const transfer = service.transferClue(
+        req.params.id,
+        targetTeamId,
+        reason || "",
+        req.currentUser!,
+      );
+      if (!transfer) return res.status(404).json({ message: "线索不存在" });
+      await service.db.write();
+      res.json(transfer);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  },
+);
+
 router.get("/statistics/backlog", async (_req, res) => {
   await service.ensureData();
   res.json(service.getBacklogStats());
@@ -174,4 +219,9 @@ router.get("/statistics/my", async (req, res) => {
   await service.ensureData();
   if (!req.currentUser) return res.status(401).json({ message: "未登录" });
   res.json(service.getMyStats(req.currentUser));
+});
+
+router.get("/statistics/transfer", async (_req, res) => {
+  await service.ensureData();
+  res.json(service.getOverallTransferStats());
 });

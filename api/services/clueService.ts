@@ -13,6 +13,8 @@ import type {
   Team,
   User,
   ReporterType,
+  ClueMerge,
+  ClueTransfer,
 } from "../../shared/types.js";
 import { nanoid } from "nanoid";
 
@@ -539,6 +541,9 @@ export interface TeamStat {
   slaRate: number;
   totalReceived: number;
   inProgress: number;
+  transferOutCount: number;
+  transferInCount: number;
+  transferRate: number;
 }
 
 export function getTeamStats(): TeamStat[] {
@@ -549,6 +554,12 @@ export function getTeamStats(): TeamStat[] {
       );
       const resolved = received.filter((c) => c.status === "resolved");
       const inProgress = received.filter((c) => c.status === "verifying");
+      const transferOut = db.data.clueTransfers.filter(
+        (t) => t.fromTeamId === team.id,
+      );
+      const transferIn = db.data.clueTransfers.filter(
+        (t) => t.toTeamId === team.id,
+      );
       let totalHours = 0;
       let slaMet = 0;
       const levelSLA = { critical: 24, urgent: 48, normal: 72 };
@@ -576,6 +587,11 @@ export function getTeamStats(): TeamStat[] {
           : 0,
         totalReceived: received.length,
         inProgress: inProgress.length,
+        transferOutCount: transferOut.length,
+        transferInCount: transferIn.length,
+        transferRate: received.length
+          ? Math.round((transferOut.length / received.length) * 1000) / 10
+          : 0,
       };
     })
     .sort((a, b) => b.resolvedCount - a.resolvedCount);
@@ -636,6 +652,201 @@ export function findUserByUsername(username: string): User | undefined {
 
 export function getUserById(id: string): User | undefined {
   return db.data.users.find((u) => u.id === id);
+}
+
+export function getClueMergesByClueId(clueId: string): ClueMerge[] {
+  return db.data.clueMerges.filter(
+    (m) => m.masterClueId === clueId || m.childClueIds.includes(clueId),
+  );
+}
+
+export function getClueTransfersByClueId(clueId: string): ClueTransfer[] {
+  return db.data.clueTransfers
+    .filter((t) => t.clueId === clueId)
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+}
+
+export function mergeClues(
+  masterClueId: string,
+  childClueIds: string[],
+  remark: string | undefined,
+  operator: User,
+): ClueMerge | null {
+  const master = getClueById(masterClueId);
+  if (!master) throw new FlowError("主线索不存在");
+  if (master.status === "resolved")
+    throw new FlowError("已办结线索不可作为主线索进行合并");
+
+  const validChildren: string[] = [];
+  for (const cid of childClueIds) {
+    if (cid === masterClueId) continue;
+    const child = getClueById(cid);
+    if (!child) continue;
+    if (child.status === "resolved") continue;
+    if (child.mergedParentId) continue;
+    if (
+      child.appName !== master.appName ||
+      child.violationType !== master.violationType
+    ) {
+      throw new FlowError(
+        `线索 ${cid} 与主线索的应用或违规类型不一致，无法合并`,
+      );
+    }
+    validChildren.push(cid);
+  }
+
+  if (validChildren.length === 0) throw new FlowError("无可合并的有效线索");
+
+  const merge: ClueMerge = {
+    id: "mg_" + nanoid(8),
+    masterClueId,
+    childClueIds: validChildren,
+    mergedBy: operator.id,
+    mergedByName: operator.name,
+    mergedAt: new Date().toISOString(),
+    remark,
+  };
+  db.data.clueMerges.push(merge);
+
+  master.isMergeMaster = true;
+  master.mergedChildIds = Array.from(
+    new Set([...(master.mergedChildIds || []), ...validChildren]),
+  );
+
+  for (const cid of validChildren) {
+    const child = getClueById(cid);
+    if (child) {
+      child.mergedParentId = masterClueId;
+      child.isMergeMaster = false;
+      addLog({
+        clueId: cid,
+        operatorId: operator.id,
+        operatorName: operator.name,
+        action: "合并线索",
+        detail: `已合并入主线索 ${masterClueId}${remark ? "；备注：" + remark : ""}`,
+      });
+    }
+  }
+
+  addLog({
+    clueId: masterClueId,
+    operatorId: operator.id,
+    operatorName: operator.name,
+    action: "合并线索",
+    detail: `合并 ${validChildren.length} 条子线索：${validChildren.join("、")}${remark ? "；备注：" + remark : ""}`,
+  });
+
+  return merge;
+}
+
+export function transferClue(
+  clueId: string,
+  targetTeamId: string,
+  reason: string,
+  operator: User,
+): ClueTransfer | null {
+  const clue = getClueById(clueId);
+  if (!clue) throw new FlowError("线索不存在");
+  if (TERMINAL_STATUSES.includes(clue.status))
+    throw new FlowError("已办结线索不可转派");
+  if (!clue.assignedTo && !clue.verifierTeamId)
+    throw new FlowError("该线索尚未派发，无法转派");
+
+  if (operator.role !== "operator" && operator.role !== "verifier") {
+    throw new FlowError("您没有权限执行转派操作");
+  }
+
+  if (
+    operator.role === "verifier" &&
+    operator.teamId !== clue.verifierTeamId &&
+    operator.teamId !== clue.assignedTo
+  ) {
+    throw new FlowError("仅线索所属核查组可发起转派");
+  }
+
+  if (!reason || reason.trim().length < 5) {
+    throw new FlowError("请填写转派理由（至少5字）");
+  }
+
+  const targetTeam = db.data.teams.find((t) => t.id === targetTeamId);
+  if (!targetTeam) throw new FlowError("目标核查组不存在");
+
+  const fromTeamId = clue.verifierTeamId || clue.assignedTo!;
+  const fromTeamName = clue.assignedToName || "";
+
+  if (fromTeamId === targetTeamId) {
+    throw new FlowError("目标组与当前组相同，无需转派");
+  }
+
+  const transfer: ClueTransfer = {
+    id: "tr_" + nanoid(8),
+    clueId,
+    fromTeamId,
+    fromTeamName,
+    toTeamId: targetTeamId,
+    toTeamName: targetTeam.name,
+    reason: reason.trim(),
+    operatorId: operator.id,
+    operatorName: operator.name,
+    createdAt: new Date().toISOString(),
+  };
+  db.data.clueTransfers.push(transfer);
+
+  clue.assignedTo = targetTeamId;
+  clue.assignedToName = targetTeam.name;
+  clue.verifierTeamId = targetTeamId;
+  clue.transferCount = (clue.transferCount || 0) + 1;
+
+  if (clue.status !== "verifying") clue.status = "verifying";
+
+  addLog({
+    clueId,
+    operatorId: operator.id,
+    operatorName: operator.name,
+    action: "转派线索",
+    detail: `从「${fromTeamName}」转派至「${targetTeam.name}」，理由：${reason.trim()}`,
+  });
+
+  return transfer;
+}
+
+export function getMergeAndTransferForClue(clueId: string): {
+  merges: ClueMerge[];
+  transfers: ClueTransfer[];
+  relatedClues: Clue[];
+} {
+  const merges = getClueMergesByClueId(clueId);
+  const transfers = getClueTransfersByClueId(clueId);
+  const relatedIds = new Set<string>();
+  for (const m of merges) {
+    relatedIds.add(m.masterClueId);
+    m.childClueIds.forEach((c) => relatedIds.add(c));
+  }
+  relatedIds.delete(clueId);
+  const relatedClues = db.data.clues.filter((c) => relatedIds.has(c.id));
+  return { merges, transfers, relatedClues };
+}
+
+export function getOverallTransferStats(): {
+  totalClues: number;
+  transferredClues: number;
+  transferRate: number;
+  totalTransfers: number;
+} {
+  const clues = db.data.clues;
+  const transferred = clues.filter((c) => (c.transferCount || 0) > 0);
+  const totalTransfers = db.data.clueTransfers.length;
+  return {
+    totalClues: clues.length,
+    transferredClues: transferred.length,
+    transferRate: clues.length
+      ? Math.round((transferred.length / clues.length) * 1000) / 10
+      : 0,
+    totalTransfers,
+  };
 }
 
 export { db };

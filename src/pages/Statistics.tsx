@@ -29,6 +29,8 @@ import {
   Zap,
   AlertTriangle,
   Activity,
+  Shuffle,
+  Repeat,
 } from "lucide-react";
 import { api } from "../lib/api";
 import type { ClueLevel, TeamStats } from "../../shared/types";
@@ -90,17 +92,25 @@ export default function StatisticsPage() {
   const [backlog, setBacklog] = useState<any[]>([]);
   const [trend, setTrend] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [transferStats, setTransferStats] = useState<{
+    totalClues: number;
+    transferredClues: number;
+    transferRate: number;
+    totalTransfers: number;
+  } | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [t, b, cluesRes] = await Promise.all([
+        const [t, b, cluesRes, ts] = await Promise.all([
           api.getTeamStats(),
           api.getBacklog(),
           api.listClues({ pageSize: 999 }),
+          api.getTransferStats(),
         ]);
         setTeams(t);
         setBacklog(b);
+        setTransferStats(ts);
 
         // 构建趋势数据（按最近 7 天）
         const days = 7;
@@ -174,7 +184,7 @@ export default function StatisticsPage() {
       </div>
 
       {/* 顶部统计卡片 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard
           icon={Target}
           label="累计接收"
@@ -211,6 +221,14 @@ export default function StatisticsPage() {
           value={totalBacklog}
           sub={`重大${backlog.find((b) => b.level === "critical")?.total || 0}条`}
           accent="bg-gradient-to-br from-red-400 to-red-600"
+        />
+        <StatCard
+          icon={Shuffle}
+          label="转派率"
+          value={transferStats?.transferRate ?? 0}
+          suffix="%"
+          sub={`涉及 ${transferStats?.transferredClues ?? 0} 条线索，共 ${transferStats?.totalTransfers ?? 0} 次转派`}
+          accent="bg-gradient-to-br from-amber-500 to-orange-600"
         />
       </div>
 
@@ -599,6 +617,9 @@ export default function StatisticsPage() {
                   <th className="text-center font-medium px-4 py-3">
                     平均处理
                   </th>
+                  <th className="text-center font-medium px-4 py-3">转出</th>
+                  <th className="text-center font-medium px-4 py-3">转入</th>
+                  <th className="text-center font-medium px-4 py-3">转派率</th>
                   <th className="text-center font-medium px-4 py-3">
                     SLA 达标率
                   </th>
@@ -665,6 +686,26 @@ export default function StatisticsPage() {
                     </td>
                     <td className="text-center px-4 py-3.5 font-mono text-slate-700">
                       {t.avgHours}h
+                    </td>
+                    <td className="text-center px-4 py-3.5 text-rose-600 font-medium">
+                      {t.transferOutCount || 0}
+                    </td>
+                    <td className="text-center px-4 py-3.5 text-sky-600 font-medium">
+                      {t.transferInCount || 0}
+                    </td>
+                    <td className="text-center px-4 py-3.5">
+                      <span
+                        className={[
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium",
+                          (t.transferRate || 0) >= 20
+                            ? "bg-rose-50 text-rose-700"
+                            : (t.transferRate || 0) >= 10
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-emerald-50 text-emerald-700",
+                        ].join(" ")}
+                      >
+                        {t.transferRate || 0}%
+                      </span>
                     </td>
                     <td className="text-center px-4 py-3.5">
                       <span

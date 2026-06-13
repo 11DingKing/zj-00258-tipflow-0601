@@ -3,7 +3,14 @@ import { JSONFile } from "lowdb/node";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import type { Clue, Team, User, OperationLog } from "../../shared/types";
+import type {
+  Clue,
+  Team,
+  User,
+  OperationLog,
+  ClueMerge,
+  ClueTransfer,
+} from "../../shared/types";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +25,8 @@ export interface DatabaseSchema {
   teams: Team[];
   users: User[];
   operations: OperationLog[];
+  clueMerges: ClueMerge[];
+  clueTransfers: ClueTransfer[];
 }
 
 const defaultData: DatabaseSchema = {
@@ -25,6 +34,8 @@ const defaultData: DatabaseSchema = {
   teams: [],
   users: [],
   operations: [],
+  clueMerges: [],
+  clueTransfers: [],
 };
 
 const file = path.join(dataDir, "db.json");
