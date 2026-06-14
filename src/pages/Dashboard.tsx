@@ -2,27 +2,33 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  Gauge,
-  Users,
-  Clock,
-  FilePlus,
   ArrowUpRight,
-  Flame,
-  Snowflake,
-  Zap,
   CheckCircle2,
-  TrendingUp,
+  ChevronRight,
+  ClipboardList,
+  Clock,
+  FileCheck2,
+  FilePlus,
   Filter,
+  Flame,
+  Gauge,
+  MessageSquarePlus,
+  PlayCircle,
+  Snowflake,
+  Sparkles,
+  TrendingUp,
+  Users,
+  Zap,
 } from "lucide-react";
-import { Card, Tag, Empty, Spin } from "antd";
+import { Card, Empty, Spin, Tag } from "antd";
 import {
-  BarChart,
   Bar,
+  BarChart,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
 } from "recharts";
 import dayjs from "dayjs";
 import { api } from "../lib/api";
@@ -30,10 +36,10 @@ import { useAuthStore } from "../store/auth";
 import { LevelBadge, StatusBadge } from "../components/badges";
 import { LEVEL_LABELS, STATUS_LABELS } from "../../shared/types";
 import type {
+  BacklogStats,
   Clue,
   ClueLevel,
   ClueStatus,
-  BacklogStats,
   TeamStats,
 } from "../../shared/types";
 
@@ -140,8 +146,180 @@ export default function DashboardPage() {
 
   const totalPending = backlog.reduce((a, b) => a + b.total, 0);
 
+  const canReport = user?.role === "reporter" || user?.role === "grid_member";
+  const canOperate = user?.role === "operator";
+  const canVerify = user?.role === "verifier";
+
+  const flowSteps = [
+    {
+      key: "report",
+      title: "提交举报",
+      desc: "市民或网格员填写违规线索",
+      icon: MessageSquarePlus,
+      color: "from-emerald-400 to-emerald-600",
+      action: canReport ? () => nav("/report") : null,
+      active: canReport,
+      count: null,
+    },
+    {
+      key: "grade",
+      title: "自动分级",
+      desc: "系统按违规程度智能分级",
+      icon: Sparkles,
+      color: "from-sky-400 to-sky-600",
+      action: canOperate ? () => nav("/clues?status=pending_grade") : null,
+      active: canOperate,
+      count:
+        backlog.find((b) => b.level === "critical")?.pendingGrade +
+          backlog.find((b) => b.level === "urgent")?.pendingGrade +
+          backlog.find((b) => b.level === "normal")?.pendingGrade || 0,
+    },
+    {
+      key: "assign",
+      title: "认领派发",
+      desc: "运营认领后派发至核查组",
+      icon: ClipboardList,
+      color: "from-indigo-400 to-indigo-600",
+      action: canOperate ? () => nav("/clues?status=pending_assign") : null,
+      active: canOperate,
+      count:
+        backlog.find((b) => b.level === "critical")?.pendingAssign +
+          backlog.find((b) => b.level === "urgent")?.pendingAssign +
+          backlog.find((b) => b.level === "normal")?.pendingAssign || 0,
+    },
+    {
+      key: "verify",
+      title: "核查回填",
+      desc: "核查组核查后回填结论办结",
+      icon: FileCheck2,
+      color: "from-brand-400 to-brand-600",
+      action: canVerify ? () => nav("/clues?status=verifying") : null,
+      active: canVerify,
+      count:
+        backlog.find((b) => b.level === "critical")?.verifying +
+          backlog.find((b) => b.level === "urgent")?.verifying +
+          backlog.find((b) => b.level === "normal")?.verifying || 0,
+    },
+  ];
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* 全流程快速入门引导 */}
+      <Card
+        className="border-0 shadow-card overflow-hidden animate-fade-in"
+        style={{ animationDelay: "0.02s", borderRadius: 16 }}
+        styles={{ body: { padding: 0 } }}
+      >
+        <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 px-6 py-5 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_20%_50%,rgba(255,107,53,0.4),transparent_40%),radial-gradient(circle_at_80%_50%,rgba(16,185,129,0.4),transparent_40%)]" />
+          <div className="relative z-10 flex items-center justify-between">
+            <div>
+              <div className="text-navy-100/70 text-xs mb-1 flex items-center gap-1.5">
+                <PlayCircle size={12} />
+                全流程快速入门 · 新同事一分钟上手
+              </div>
+              <div className="font-serif text-white text-lg font-semibold">
+                线索治理四步走：提交 → 分级 → 派发 → 核查
+              </div>
+            </div>
+            <div className="text-right text-navy-100/80 text-xs">
+              <div className="mb-0.5">前端工作台 + 后端线索库已就绪</div>
+              <div>按角色点击下方卡片进入对应环节</div>
+            </div>
+          </div>
+        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {flowSteps.map((step, idx) => {
+              const Icon = step.icon;
+              const clickable = !!step.action && step.active;
+              return (
+                <div
+                  key={step.key}
+                  onClick={step.action || undefined}
+                  className={[
+                    "relative rounded-xl border p-4 transition-all animate-fade-in",
+                    clickable
+                      ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5 border-slate-200 hover:border-navy-300 bg-white"
+                      : "cursor-not-allowed opacity-60 border-slate-100 bg-slate-50",
+                  ].join(" ")}
+                  style={{ animationDelay: `${0.05 + idx * 0.04}s` }}
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div
+                      className={[
+                        "w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
+                        step.color,
+                      ].join(" ")}
+                    >
+                      <Icon size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif text-sm font-semibold text-slate-900">
+                          {step.title}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-mono">
+                          Step {idx + 1}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                        {step.desc}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      {step.count !== null && step.count > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          待处理 {step.count}
+                        </span>
+                      ) : step.active ? (
+                        <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                          <CheckCircle2 size={11} />
+                          随时可用
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">
+                          非您角色权限
+                        </span>
+                      )}
+                    </div>
+                    {clickable && (
+                      <ArrowUpRight
+                        size={14}
+                        className="text-slate-400 group-hover:text-navy-700"
+                      />
+                    )}
+                  </div>
+                  {idx < flowSteps.length - 1 && (
+                    <ChevronRight
+                      size={20}
+                      className="absolute -right-3 top-1/2 -translate-y-1/2 text-slate-300 hidden md:block"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              SLA：重大 24h · 紧急 48h · 一般 72h
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
+              角色：举报用户 / 网格员 → 运营 → 核查组
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              服务：前端 Vite (5173) + 后端 Express (3001) 已联动
+            </span>
+          </div>
+        </div>
+      </Card>
+
       {/* Top: 积压卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card
